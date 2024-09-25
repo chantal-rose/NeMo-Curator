@@ -16,13 +16,14 @@ import argparse
 import os
 import shutil
 from typing import Any
+import yaml
 
 from docbuilder import TinyStoriesDownloader
 from filters import IncompleteStoryFilter
 from helpers import write_jsonl
 from modifiers import QuotationUnifier
 
-from nemo_curator import ScoreFilter, Sequential
+from nemo_curator import AddId, ScoreFilter, Sequential
 from nemo_curator.datasets import DocumentDataset
 from nemo_curator.filters import RepeatingTopNGramsFilter, WordCountFilter
 from nemo_curator.modifiers.pii_modifier import PiiModifier
@@ -153,13 +154,16 @@ def dedupe(dataset: DocumentDataset) -> DocumentDataset:
     Returns:
         DocumentDataset: The deduplicated dataset.
     """
+    add_id = AddId(id_field="doc_id")
+    dataset = add_id(dataset)
+    
     with open(SEM_DEDUP_CONFIG, "r") as config_file:
         config_dict = yaml.safe_load(config_file)
 
     # Create SemDedupConfig object
     config = SemDedupConfig(**config_dict)
     # Initialize SemDedup with the configuration
-    deduped = SemDedup(config, logger=LOGS_DIR)
+    sem_dedup = SemDedup(config, logger=LOGS_DIR)
     # Perform semantic deduplication
     deduplicated_dataset_ids = sem_dedup(dataset)
     duplicates = deduplicator(dataset)
@@ -226,11 +230,13 @@ def main():
     # Limit the total number of workers to ensure we don't run out of memory.
     args.n_workers = min(args.n_workers, 8)
 
-    # Prepare the download and JSONL directories.
+    # Prepare the download, logs and JSONL directories.
     if not os.path.isdir(DATA_DIR):
         os.makedirs(DATA_DIR)
     if not os.path.isdir(JSONL_ROOT_DIR):
         os.makedirs(JSONL_ROOT_DIR)
+    if not os.path.isdir(LOGS_DIR):
+        os.makedirs(LOGS_DIR)
 
     jsonl_val_dir = download_and_convert_to_jsonl()
 
